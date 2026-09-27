@@ -8,7 +8,8 @@ test('Compatible chat endpoint receives state/questions; parses real probabiliti
  const api=new ApiDecision({base:'https://gateway.test/v1/',model:'decision-model',key:'test-secret',fetchImpl:async(url,options)=>{seen={url,options};return {ok:true,json:async()=>envelope()};}});
  const result=await api.decide('点击搜索',criteria);
  assert.equal(seen.url,'https://gateway.test/v1/chat/completions');
- const body=JSON.parse(seen.options.body),content=JSON.parse(body.messages[0].content);
+ const body=JSON.parse(seen.options.body),content=JSON.parse(body.messages.find(message=>message.role==='user').content);
+ assert.equal(body.messages[0].role,'system');
  assert.deepEqual(content.questions.scenario.criteria,criteria);assert.equal(content.state,'点击搜索');
  assert.equal(body.model,'decision-model');assert.equal(seen.options.redirect,'error');
  assert.equal(result.choice,'搜索');assert.deepEqual(result.probabilities,{搜索:.9,停止:.1});
