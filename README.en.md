@@ -16,11 +16,11 @@ https://github.com/user-attachments/assets/940b2562-41ff-47ed-a6e0-e179d4d0847d
 
 ## Features
 
-| Entry point | What it does | Outputs |
-| --- | --- | --- |
-| `--mode generate` | Explores tabs, tables, filters, form validation, and supported CRUD actions | 17-column XLSX, report, browser evidence |
-| `--mode execute` | Re-discovers DOM controls and replays a generated workbook | Separate `执行结果.xlsx`, report, evidence |
-| `--excel` | Executes supported steps from an existing workbook; selects source rows marked `pass` by default | JSON, CSV and Markdown reports |
+| Entry point       | What it does                                                                                     | Outputs                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| `--mode generate` | Explores tabs, tables, filters, form validation, and supported CRUD actions                      | 17-column XLSX, report, browser evidence   |
+| `--mode execute`  | Re-discovers DOM controls and replays a generated workbook                                       | Separate `执行结果.xlsx`, report, evidence |
+| `--excel`         | Executes supported steps from an existing workbook; selects source rows marked `pass` by default | JSON, CSV and Markdown reports             |
 
 Only flows that completed with a page assertion are written to a generated workbook. The visible steps and expected results follow the 17-column template; a hidden sheet holds structured replay steps. If the visible case changes without its replay steps, execution stops. Failures capture the failed step, page and console errors, HTTP 4xx/5xx events, and screenshots. Approval, multi-user permissions, file import, and arbitrary websites or prose cases are not universally supported.
 
@@ -79,6 +79,19 @@ Local mode defaults to `convaiinnovations/laya-multilingual`; set `LAYA_MODEL=/p
 Run artifacts go to ignored `runs/` and generated workbooks to ignored `generated-cases/`. Reports and workbooks may contain test URLs, page text or test data; review them before sharing. Run `./run.sh --help` for CLI options.
 
 ## Development and limitations
+
+Code uses four-space indentation, UTF-8, LF line endings, and a 100-column wrapping target. Prettier formats JS, JSON, HTML, and Markdown; Ruff formats Python. Formatter versions are pinned, and formatting does not apply lint fixes.
+
+Development requires Node.js and uv. After `npm install`, run:
+
+```bash
+npm run format        # Format the repository
+npm run format:check  # Check formatting before a commit or in CI
+```
+
+On its first run, `uv tool run` obtains the pinned Ruff version and caches it for later use. Local model dependencies are not required. Runtime output, local configuration, and dependency directories are excluded; npm manages `package-lock.json`.
+
+`.editorconfig` supplies basic editor conventions; it does not reformat existing files. For formatting on save, install the Prettier and Ruff editor extensions and enable formatting on save for the corresponding languages.
 
 ```bash
 npm test

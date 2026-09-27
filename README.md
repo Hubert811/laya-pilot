@@ -16,11 +16,11 @@ https://github.com/user-attachments/assets/940b2562-41ff-47ed-a6e0-e179d4d0847d
 
 ## 功能
 
-| 入口 | 能力 | 产物 |
-| --- | --- | --- |
-| `--mode generate` | 观察页面并尝试页签、列表、筛选、表单校验及新增/查询/查看/修改/删除 | 17 列 Excel、报告、浏览器证据 |
-| `--mode execute` | 重新定位 DOM 并回放生成的 Excel | 独立的 `执行结果.xlsx`、报告、证据 |
-| `--excel` | 读取现有自然语言 Excel，默认只选来源结果为 `pass` 的行 | JSON、CSV、Markdown 报告 |
+| 入口              | 能力                                                               | 产物                               |
+| ----------------- | ------------------------------------------------------------------ | ---------------------------------- |
+| `--mode generate` | 观察页面并尝试页签、列表、筛选、表单校验及新增/查询/查看/修改/删除 | 17 列 Excel、报告、浏览器证据      |
+| `--mode execute`  | 重新定位 DOM 并回放生成的 Excel                                    | 独立的 `执行结果.xlsx`、报告、证据 |
+| `--excel`         | 读取现有自然语言 Excel，默认只选来源结果为 `pass` 的行             | JSON、CSV、Markdown 报告           |
 
 生成器只把**实际操作成功且页面断言通过**的流程写入 Excel。生成的工作簿有可见的步骤与预期结果，以及隐藏的结构化回放步骤；可见用例与隐藏步骤不一致时会拒绝回放。回放会创建本轮唯一命名的测试记录，并在支持的流程中清理它。错误报告可包含失败步骤、页面异常、控制台错误、接口 4xx/5xx 和截图。它不是对任意网站、任意 Excel 的完整自动化保证；审批、多账号权限、文件导入等业务流程仍需要专门适配。
 
@@ -79,6 +79,19 @@ export LAYA_API_KEY='your-secret-key'
 运行证据默认写入 `runs/`，生成文件默认写入 `generated-cases/`，两者均不纳入 Git。生成的 Excel 和报告可能含目标 URL、页面文本或测试数据，公开前请自行检查。完整 CLI 参数运行 `./run.sh --help`。
 
 ## 开发与限制
+
+代码统一使用 4 空格缩进、UTF-8、LF 换行，以 100 列作为自动换行参考。Prettier 负责 JS、JSON、HTML 和 Markdown，Ruff 负责 Python；工具版本固定，格式化不执行 lint 自动修复。
+
+开发环境需要 Node.js 和 uv。执行 `npm install` 后，可运行：
+
+```bash
+npm run format        # 格式化整个仓库
+npm run format:check  # 只检查格式，适用于提交前或 CI
+```
+
+Python 格式化首次运行时由 `uv tool run` 获取固定版本的 Ruff，后续复用缓存，不需要安装本地模型依赖。运行产物、本地配置和依赖目录不参与格式化，`package-lock.json` 由 npm 管理。
+
+`.editorconfig` 只提供编辑器的基础约定，不会自动重排已有文件。需要保存时格式化时，在编辑器安装 Prettier、Ruff 扩展并启用对应语言的保存时格式化。
 
 ```bash
 npm test

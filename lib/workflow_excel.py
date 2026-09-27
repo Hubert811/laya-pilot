@@ -1,4 +1,5 @@
 """Standalone XLSX contract for generated browser workflows."""
+
 import copy
 import hashlib
 import json
@@ -13,20 +14,39 @@ from openpyxl.utils import get_column_letter
 
 
 HEADERS = [
-    '测试编号', '模块名称', '子模块名称', '测试用例名称', '优先级', '用例类型',
-    '用例类别', '前提条件', '测试步骤', '预期结果', '实际执行结果', '执行测试人员',
-    '执行状态', '用例引入阶段', '执行日期', '备注', '是否提bug',
+    '测试编号',
+    '模块名称',
+    '子模块名称',
+    '测试用例名称',
+    '优先级',
+    '用例类型',
+    '用例类别',
+    '前提条件',
+    '测试步骤',
+    '预期结果',
+    '实际执行结果',
+    '执行测试人员',
+    '执行状态',
+    '用例引入阶段',
+    '执行日期',
+    '备注',
+    '是否提bug',
 ]
 META = '__laya_steps__'
-TITLES = {'tabs': '页签入口可见', 'tab-switch': '页签切换后可见并可切回',
-          'table': '列表列头可见', 'filters': '名称筛选控件可见',
-          'form-validation': '新增表单必填项为空时阻止保存',
-          'form-invalid': '数值区间示例的非法括号触发校验',
-          'create': '新增独立测试记录', 'search': '按名称查询刚创建的记录',
-          'view': '查看独立测试记录', 'edit': '修改独立测试记录名称',
-          'delete': '删除独立测试记录'}
-OPERATIONS = {'create': '新增', 'search': '查询', 'view': '查看',
-              'edit': '修改', 'delete': '删除'}
+TITLES = {
+    'tabs': '页签入口可见',
+    'tab-switch': '页签切换后可见并可切回',
+    'table': '列表列头可见',
+    'filters': '名称筛选控件可见',
+    'form-validation': '新增表单必填项为空时阻止保存',
+    'form-invalid': '数值区间示例的非法括号触发校验',
+    'create': '新增独立测试记录',
+    'search': '按名称查询刚创建的记录',
+    'view': '查看独立测试记录',
+    'edit': '修改独立测试记录名称',
+    'delete': '删除独立测试记录',
+}
+OPERATIONS = {'create': '新增', 'search': '查询', 'view': '查看', 'edit': '修改', 'delete': '删除'}
 
 
 def cell_text(value):
@@ -38,7 +58,9 @@ def visible_fields(sheet, row):
 
 
 def digest(fields):
-    return hashlib.sha256(json.dumps(fields, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(fields, ensure_ascii=False, separators=(',', ':')).encode()
+    ).hexdigest()
 
 
 def step_text(step):
@@ -46,21 +68,23 @@ def step_text(step):
     target = step.get('target', {}).get('name', '')
     value = step.get('value', '')
     if kind == 'click':
-        return f'点击「{target}」' + ('（本轮记录所在行）' if step.get('target', {}).get('scope') == 'owned-row' else '')
+        return f'点击「{target}」' + (
+            '（本轮记录所在行）' if step.get('target', {}).get('scope') == 'owned-row' else ''
+        )
     if kind == 'fill':
         if isinstance(value, dict):
             value = '${' + value['fixture'] + '}'
         return f'在「{target}」输入「{value}」'
     if kind == 'form-fill':
-        return f'在表单「{step["target"]["label"]}」第{step["target"]["index"]+1}个输入框输入「{value}」'
+        return f'在表单「{step["target"]["label"]}」第{step["target"]["index"] + 1}个输入框输入「{value}」'
     if kind == 'form-fill-required':
-        return f'在必填输入框「{step["target"]["placeholder"]}」第{step["target"]["index"]+1}项输入「{value}」'
+        return f'在必填输入框「{step["target"]["placeholder"]}」第{step["target"]["index"] + 1}项输入「{value}」'
     if kind == 'form-select':
         return f'在表单「{step["target"]["label"]}」依次选择：' + ' → '.join(step['path'])
     if kind == 'assert-form-errors':
         return '核对表单未关闭，必填字段显示校验错误：' + '、'.join(value)
     if kind == 'assert-input-invalid':
-        return f'核对必填输入框「{step["target"]["placeholder"]}」第{step["target"]["index"]+1}项显示格式错误'
+        return f'核对必填输入框「{step["target"]["placeholder"]}」第{step["target"]["index"] + 1}项显示格式错误'
     if kind == 'reload':
         return '重新加载页面，验证数据已保存'
     if kind == 'assert-row':
@@ -134,24 +158,48 @@ def write(payload):
     sheet.row_dimensions[1].height = old.row_dimensions[1].height
     meta = book.create_sheet(META)
     meta.sheet_state = 'veryHidden'
-    meta['A1'] = json.dumps({'schemaVersion': file['schemaVersion'],
-                             'generatedAt': file['generatedAt'],
-                             'moduleUrl': file['moduleUrl'],
-                             'coverage': file['coverage']}, ensure_ascii=False)
+    meta['A1'] = json.dumps(
+        {
+            'schemaVersion': file['schemaVersion'],
+            'generatedAt': file['generatedAt'],
+            'moduleUrl': file['moduleUrl'],
+            'coverage': file['coverage'],
+        },
+        ensure_ascii=False,
+    )
     meta.append(['id', 'visible_sha256', 'case_json'])
     module = Path(file['moduleUrl'].split('?')[0].rstrip('/')).name or '目标页面'
     for index, case in enumerate(file['cases'], 2):
         uses_owned_record = case['operation'] in ('create', 'search', 'view', 'edit', 'delete')
-        precondition = ('已登录并进入目标模块；使用本轮唯一命名的独立测试记录'
-                        if uses_owned_record else '已登录并进入目标模块')
-        remark = ('生成时已执行并验证；执行模式将使用新的独立测试记录'
-                  if uses_owned_record else '生成时已执行并验证；执行模式将重新检查页面，不创建记录')
-        values = [f'{index-1:03d}', module, module,
-                  f'{module} - {TITLES[case["operation"]]}', '中', '正案例', '功能',
-                  precondition,
-                  '\n'.join(f'{n}、{step_text(step)}' for n, step in enumerate(case['steps'], 1)),
-                  expected_text(case), None, None, '未执行', '自动生成', None,
-                  remark, None]
+        precondition = (
+            '已登录并进入目标模块；使用本轮唯一命名的独立测试记录'
+            if uses_owned_record
+            else '已登录并进入目标模块'
+        )
+        remark = (
+            '生成时已执行并验证；执行模式将使用新的独立测试记录'
+            if uses_owned_record
+            else '生成时已执行并验证；执行模式将重新检查页面，不创建记录'
+        )
+        values = [
+            f'{index - 1:03d}',
+            module,
+            module,
+            f'{module} - {TITLES[case["operation"]]}',
+            '中',
+            '正案例',
+            '功能',
+            precondition,
+            '\n'.join(f'{n}、{step_text(step)}' for n, step in enumerate(case['steps'], 1)),
+            expected_text(case),
+            None,
+            None,
+            '未执行',
+            '自动生成',
+            None,
+            remark,
+            None,
+        ]
         values = [clean(v) for v in values]
         for col, value in enumerate(values, 1):
             dest = sheet.cell(index, col, value)
@@ -165,9 +213,16 @@ def write(payload):
                 # Names and page text are untrusted workbook input. Keep them
                 # literal even if a site label begins with an Excel formula.
                 dest.data_type = 's'
-        sheet.row_dimensions[index].height = min(280, max(42, 18 * max(values[8].count('\n') + 1,
-                                                                        values[9].count('\n') + 1)))
-        meta.append([values[0], digest(visible_fields(sheet, index)), clean(json.dumps(case, ensure_ascii=False))])
+        sheet.row_dimensions[index].height = min(
+            280, max(42, 18 * max(values[8].count('\n') + 1, values[9].count('\n') + 1))
+        )
+        meta.append(
+            [
+                values[0],
+                digest(visible_fields(sheet, index)),
+                clean(json.dumps(case, ensure_ascii=False)),
+            ]
+        )
     sheet.auto_filter.ref = f'A1:Q{max(2, sheet.max_row)}'
     Path(payload['path']).parent.mkdir(parents=True, exist_ok=True)
     book.save(payload['path'])
@@ -189,14 +244,20 @@ def read(payload):
         case_id, saved_hash, recipe = [meta.cell(row, col).value for col in (1, 2, 3)]
         visible_row = row - 1
         if digest(visible_fields(sheet, visible_row)) != saved_hash:
-            raise ValueError(f'第{visible_row}行可见用例已修改，与隐藏回放步骤不一致，请重新生成或校对后再执行')
+            raise ValueError(
+                f'第{visible_row}行可见用例已修改，与隐藏回放步骤不一致，请重新生成或校对后再执行'
+            )
         case = json.loads(recipe)
         if case_id != sheet.cell(visible_row, 1).value:
             raise ValueError(f'第{visible_row}行用例编号不一致')
         cases.append(case)
     book.close()
-    return {'schemaVersion': header['schemaVersion'], 'moduleUrl': header['moduleUrl'],
-            'cases': cases, 'coverage': header.get('coverage', [])}
+    return {
+        'schemaVersion': header['schemaVersion'],
+        'moduleUrl': header['moduleUrl'],
+        'cases': cases,
+        'coverage': header.get('coverage', []),
+    }
 
 
 def results(payload):
@@ -204,16 +265,31 @@ def results(payload):
     sheet = book['生成用例']
     sheet.column_dimensions['P'].width = max(sheet.column_dimensions['P'].width or 0, 70)
     for row, result in enumerate(payload['results'], 2):
-        if row > sheet.max_row or result['id'] != json.loads(book[META].cell(row+1, 3).value)['id']:
+        if (
+            row > sheet.max_row
+            or result['id'] != json.loads(book[META].cell(row + 1, 3).value)['id']
+        ):
             raise ValueError('执行结果与生成用例顺序不一致')
-        sheet.cell(row, 11).value = 'pass' if result['status'] == '通过' else 'skip' if result['status'] == '未执行（依赖阻断）' else 'fail'
-        sheet.cell(row, 13).value = '未执行' if result['status'] == '未执行（依赖阻断）' else '已执行'
-        sheet.cell(row, 15).value = None if result['status'] == '未执行（依赖阻断）' else datetime.now()
+        sheet.cell(row, 11).value = (
+            'pass'
+            if result['status'] == '通过'
+            else 'skip'
+            if result['status'] == '未执行（依赖阻断）'
+            else 'fail'
+        )
+        sheet.cell(row, 13).value = (
+            '未执行' if result['status'] == '未执行（依赖阻断）' else '已执行'
+        )
+        sheet.cell(row, 15).value = (
+            None if result['status'] == '未执行（依赖阻断）' else datetime.now()
+        )
         diagnosis = result.get('diagnosis') or {}
         step = result.get('failedStep') or {}
         notes = [f'原因分类：{diagnosis["category"]}'] if diagnosis.get('category') else []
         if step.get('number'):
-            notes.append(f'失败步骤：{step["number"]}（{step.get("action", "")} {step.get("target", "")}）')
+            notes.append(
+                f'失败步骤：{step["number"]}（{step.get("action", "")} {step.get("target", "")}）'
+            )
         if not diagnosis.get('primary') or diagnosis['primary'] not in result['reason']:
             notes.append(f'执行错误：{result["reason"]}')
         if diagnosis.get('assessment'):
@@ -221,10 +297,13 @@ def results(payload):
         if diagnosis.get('primary'):
             notes.append(f'同期证据：{diagnosis["primary"]}')
         for attempt in result.get('attempts', []):
-            notes.append(f"尝试：{attempt['step']} 第{attempt['attempt']}次 {attempt['status']} {attempt.get('reason', '')}")
+            notes.append(
+                f'尝试：{attempt["step"]} 第{attempt["attempt"]}次 {attempt["status"]} {attempt.get("reason", "")}'
+            )
         note = '\n'.join(notes)[:3000]
         # 回放失败原因含 ANSI 转义（\u001b[2m 等），openpyxl 会抛 IllegalCharacterError
         from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+
         note = ILLEGAL_CHARACTERS_RE.sub('', note)
         remark = sheet.cell(row, 16)
         remark.value = note
@@ -232,8 +311,18 @@ def results(payload):
         alignment.wrap_text = True
         alignment.vertical = 'top'
         remark.alignment = alignment
-        visual_lines = sum(max(1, math.ceil(sum(2 if unicodedata.east_asian_width(ch) in 'WF' else 1 for ch in line) / 66)) for line in note.split('\n'))
-        sheet.row_dimensions[row].height = min(300, max(sheet.row_dimensions[row].height or 0, visual_lines * 18 + 12))
+        visual_lines = sum(
+            max(
+                1,
+                math.ceil(
+                    sum(2 if unicodedata.east_asian_width(ch) in 'WF' else 1 for ch in line) / 66
+                ),
+            )
+            for line in note.split('\n')
+        )
+        sheet.row_dimensions[row].height = min(
+            300, max(sheet.row_dimensions[row].height or 0, visual_lines * 18 + 12)
+        )
     Path(payload['output']).parent.mkdir(parents=True, exist_ok=True)
     book.save(payload['output'])
     return {'path': payload['output'], 'cases': len(payload['results'])}

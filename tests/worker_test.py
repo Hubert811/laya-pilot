@@ -12,6 +12,7 @@ worker = importlib.util.module_from_spec(spec)
 with patch.object(sys, 'stdin', io.StringIO('')):
     spec.loader.exec_module(worker)
 
+
 class ImportResultTest(unittest.TestCase):
     def test_source_result_is_not_execution_status_or_expected_result(self):
         wb = Workbook()
@@ -26,6 +27,7 @@ class ImportResultTest(unittest.TestCase):
             cases = worker.read_excel(filename)['cases']
         self.assertEqual([c['source_result'] for c in cases], ['pass', 'fail', '废弃'])
         self.assertEqual([c['id'] for c in cases if c['source_result'] == 'pass'], ['001'])
+
 
 if __name__ == '__main__':
     unittest.main()

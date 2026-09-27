@@ -4,14 +4,25 @@
     "private": false,
     "description": "Generate and replay browser test cases from a live page or an Excel workbook",
     "license": "MIT",
-    "engines": { "node": ">=20" },
+    "engines": {
+        "node": ">=20"
+    },
     "type": "module",
     "scripts": {
+        "format": "npm run format:web && npm run format:python",
+        "format:check": "npm run format:web:check && npm run format:python:check",
+        "format:web": "prettier --write .",
+        "format:web:check": "prettier --check .",
+        "format:python": "uv tool run --from ruff==0.15.21 ruff format .",
+        "format:python:check": "uv tool run --from ruff==0.15.21 ruff format --check .",
         "test": "node --test tests/*.test.mjs",
         "start": "node runner.mjs",
         "demo": "node examples/demo-server.mjs"
     },
     "dependencies": {
         "playwright": "1.62.1"
+    },
+    "devDependencies": {
+        "prettier": "3.9.9"
     }
 }
