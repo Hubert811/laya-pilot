@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { score } from '../lib/dom.mjs';
+import { score, displayable, controlHint, namesClash, optionKeys } from '../lib/dom.mjs';
 
 // Replay of the intent/name pairs observed on FA and ESP during the 2026-09-28/29 sessions.
 const control = (name, extra = {}) => ({ name, placeholder: '', context: '', ...extra });
+// What observe() reports for a container grouping form controls: every synonym a case author
+// might write, because the classifier only matches the wording the step happens to use.
+const FILTER = '筛选区/查询条件/表单';
 
 test('decorated Chinese field names match their core label exactly', () => {
     assert.equal(score('产品名称', control('请输入产品名称')), 132);
@@ -21,3 +24,50 @@ test('existing match tiers keep their scores', () => {
     assert.equal(score('查询', control('查询', { placeholder: '查询' })), 132);
 });
 
+
+test('option labels collapse the antd two-character space', () => {
+    assert.equal(displayable('搜 索'), '搜索');
+    assert.equal(displayable('登 录'), '登录');
+    assert.equal(displayable('Sign in'), 'Sign in', 'latin labels keep their spaces');
+    assert.equal(
+        displayable('产品 产品目录 搜索'),
+        '产品 产品目录 搜索',
+        'multi-word names keep their spaces',
+    );
+    assert.equal(controlHint({ typeWord: '按钮', area: FILTER }), '按钮·' + FILTER);
+    assert.equal(controlHint({ typeWord: '链接', area: '菜单栏' }), '链接·菜单栏');
+    assert.equal(controlHint({ typeWord: 'option' }), 'option');
+    assert.equal(controlHint({}), '');
+});
+
+test('a same-name clash is detected across the antd space', () => {
+    const link = control('搜索', { role: 'link', typeWord: '链接', area: '菜单栏' });
+    const button = control('搜 索', { role: 'button', typeWord: '按钮', area: FILTER });
+    assert.equal(namesClash([link, button]), true);
+    assert.equal(namesClash([link, control('重置')]), false);
+});
+
+test('type·region labels appear only when they tell candidates apart', () => {
+    const link = control('搜索', { role: 'link', typeWord: '链接', area: '菜单栏' });
+    const button = control('搜 索', { role: 'button', typeWord: '按钮', area: FILTER });
+    assert.deepEqual(
+        optionKeys([button, link]).map((x) => x.key),
+        ['搜索（按钮·' + FILTER + '）', '搜索（链接·菜单栏）'],
+    );
+    // Every dropdown option shares 选项·下拉列表: the suffix would be pure noise.
+    const options = ['杭州安诺过滤器材有限公司', '上海震坤行', '全部'].map((n) =>
+        control(n, { role: 'option', typeWord: '选项', area: '下拉列表' }),
+    );
+    assert.deepEqual(
+        optionKeys(options).map((x) => x.key),
+        ['杭州安诺过滤器材有限公司', '上海震坤行', '全部'],
+    );
+    // Same name, same region: fall back to row context so the keys stay unique.
+    const rows = [
+        control('编辑', { role: 'button', typeWord: '按钮', area: '数据行', context: 'SPU 131318' }),
+        control('编辑', { role: 'button', typeWord: '按钮', area: '数据行', context: 'SPU 222222' }),
+    ];
+    const keys = optionKeys(rows).map((x) => x.key);
+    assert.equal(new Set(keys).size, 2);
+    assert.ok(keys[0].includes('SPU 131318') && keys[1].includes('SPU 222222'));
+});

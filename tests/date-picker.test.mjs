@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { describe } from '../lib/language.mjs';
-import { dateFormatFrom, formatIsoDate, datePanelState } from '../lib/dom.mjs';
+import { dateFormatFrom, formatIsoDate, datePanelState, planArrow } from '../lib/dom.mjs';
 
 test('date verb parses single and range targets without stealing fill steps', () => {
     assert.deepEqual(describe('在“下单时间”选择日期“2026-01-01”到“2026-09-30”'), {
@@ -31,9 +31,18 @@ test('typed date format follows the placeholder or the value already shown', () 
 });
 
 const monthPanel = (el, year, month, left, days) => {
-    const arrows = ['«', '‹', '›', '»'].map((glyph, i) =>
-        el('I', glyph, { top: 10, left: left + i * 30, bottom: 30, width: 20, height: 20 }, 'pointer'),
-    );
+    const arrows = ['«', '‹', '›', '»'].map((glyph, i) => {
+        const rect = { top: 10, left: left + i * 30, bottom: 30, width: 20, height: 20 };
+        const icon = el('I', glyph, rect, 'pointer');
+        // antd wraps a glyph in a button sharing the click point, off by sub-pixel rounding
+        return i === 2
+            ? el('BUTTON', glyph, { ...rect, bottom: 31, height: 21 }, 'pointer', [icon])
+            : icon;
+    });
+    const pickers = [
+        el('BUTTON', `${month}月`, { top: 10, left: left + 160, bottom: 30, width: 30, height: 20 }, 'pointer'),
+        el('BUTTON', `${year}年`, { top: 10, left: left + 200, bottom: 30, width: 40, height: 20 }, 'pointer'),
+    ];
     const header = el('DIV', `${year}年 ${month}月`, {
         top: 10,
         left: left + 70,
@@ -63,23 +72,27 @@ const monthPanel = (el, year, month, left, days) => {
         `${year}年 ${month}月 一 二 三 四 五 六 日 ` + days.join(' '),
         { top: 0, left, bottom: 240, width: 360, height: 240 },
         'default',
-        [...arrows, header, week, grid],
+        [...arrows, ...pickers, header, week, grid],
     );
     return { panel, arrows, cells };
 };
 
 const panelDom = () => {
-    const el = (tagName, innerText, rect, cursor = 'default', children = []) => ({
-        tagName,
-        innerText,
-        children,
-        rect,
-        cursor,
-        querySelectorAll: (s) => (s === '*' ? descendantsOf(children) : []),
-        getBoundingClientRect: () => rect,
-        setAttribute: () => {},
-        getAttribute: () => null,
-    });
+    const el = (tagName, innerText, rect, cursor = 'default', children = []) => {
+        const node = {
+            tagName,
+            innerText,
+            children,
+            rect,
+            cursor,
+            querySelectorAll: (s) => (s === '*' ? descendantsOf(children) : []),
+            getBoundingClientRect: () => rect,
+            setAttribute: () => {},
+            getAttribute: () => null,
+            contains: (x) => x === node || children.some((c) => c.contains(x)),
+        };
+        return node;
+    };
     const descendantsOf = (kids) => {
         const out = [];
         const walk = (n) => n.children.forEach((c) => (out.push(c), walk(c)));
@@ -122,8 +135,60 @@ test('date panel exposes month header, sequenced days and positional arrows', as
     assert.equal(day15.d, 15);
     assert.equal(left.cells.filter((c) => c.d === 1).length, 2, 'real 1st plus next-month copy');
     const center = (e) => e.rect.left + e.rect.width / 2;
-    assert.equal(left.arrows.prev.cx, center(L.arrows[1]), 'left panel pages itself backwards');
-    assert.equal(left.arrows.next.cx, center(L.arrows[2]), 'left panel pages itself forwards');
-    assert.equal(right.arrows.prev.cx, center(R.arrows[1]), 'right panel pages itself backwards');
-    assert.equal(right.arrows.next.cx, center(R.arrows[2]), 'right panel pages itself forwards');
+    assert.equal(left.arrows.length, 4, 'duplicate icon spans and header month/year buttons add no arrows');
+    assert.equal(left.arrows[0].cx, center(L.arrows[0]));
+    assert.equal(left.arrows[3].cx, center(L.arrows[3]));
+    assert.equal(right.arrows[1].cx, center(R.arrows[1]));
+    assert.equal(right.arrows[2].cx, center(R.arrows[2]));
+    const vcenter = (e) => e.rect.top + e.rect.height / 2;
+    assert.equal(left.arrows[2].cy, vcenter(L.arrows[2]), 'click point keeps both axes');
+});
+
+const arrows = (n, units = []) => Array.from({ length: n }, (_, i) => ({ cx: i, cy: 0, unit: units[i] || '' }));
+
+test('the next arrow comes from measurement, never from position', () => {
+    // Nothing measured yet: the click is a measurement, whichever arrow it lands on.
+    assert.deepEqual(planArrow(arrows(4), new Map(), -1, 2), { idx: 0, probing: true });
+    // The widget's own label only orders the first measurement: month step before year step.
+    assert.deepEqual(planArrow(arrows(2, ['year', 'month']), new Map(), -1, 2), {
+        idx: 1,
+        probing: true,
+    });
+    // A measured month arrow that fits is reused.
+    assert.deepEqual(planArrow(arrows(4), new Map([['a1', { sign: -1, mag: 1 }]]), -1, 3), {
+        idx: 1,
+        probing: false,
+        mag: 1,
+    });
+    // Over a year away with an arrow still unknown: spend one click measuring rather than
+    // grinding twelve month clicks.
+    assert.deepEqual(planArrow(arrows(2), new Map([['a1', { sign: 1, mag: 1 }]]), 1, 20), {
+        idx: 0,
+        probing: true,
+    });
+    // Once a year arrow is measured it wins: biggest step that does not overshoot.
+    assert.deepEqual(
+        planArrow(
+            arrows(2),
+            new Map([
+                ['a0', { sign: 1, mag: 12 }],
+                ['a1', { sign: 1, mag: 1 }],
+            ]),
+            1,
+            20,
+        ),
+        { idx: 0, probing: false, mag: 12 },
+    );
+    // A year arrow must not overshoot a five-month distance, and nothing else is known.
+    assert.equal(planArrow(arrows(1), new Map([['a0', { sign: 1, mag: 12 }]]), 1, 5), null);
+    // An arrow that moved nothing is recorded dead (sign 0) and never picked again.
+    assert.equal(planArrow(arrows(1), new Map([['a0', { sign: 0, mag: 0 }]]), 1, 5), null);
+    // Wrong direction only, and nothing left to measure: this panel cannot help.
+    assert.equal(planArrow(arrows(1), new Map([['a0', { sign: -1, mag: 1 }]]), 1, 5), null);
+    // An unmeasured arrow is always worth one click, even when a measured one points the
+    // wrong way — the other arrow of the same panel may be the one that fits.
+    assert.deepEqual(planArrow(arrows(2), new Map([['a0', { sign: -1, mag: 1 }]]), 1, 5), {
+        idx: 1,
+        probing: true,
+    });
 });
