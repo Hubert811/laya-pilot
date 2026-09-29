@@ -375,7 +375,10 @@ async function main() {
         config.loginUrl = loginUrl;
         console.log('页面语言：' + (await switchLanguage(page, config.language)));
         for (let attempt = 1; ; attempt++) {
-            const account = await engine.chooseTarget('账号 Account Username', 'fill');
+            const account = await engine.chooseTarget(
+                '账号 Account Username 用户名 请输入用户名',
+                'fill',
+            );
             await account.locator.fill(config.user);
             const passwords = page.locator('input[type="password"]:visible');
             if ((await passwords.count()) !== 1)
