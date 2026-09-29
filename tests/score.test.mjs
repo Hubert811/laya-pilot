@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { score, displayable, controlHint, namesClash, optionKeys } from '../lib/dom.mjs';
+import { score, displayable, controlHint, namesClash, optionKeys, declaredEffect } from '../lib/dom.mjs';
 
 // Replay of the intent/name pairs observed on FA and ESP during the 2026-09-28/29 sessions.
 const control = (name, extra = {}) => ({ name, placeholder: '', context: '', ...extra });
@@ -70,4 +70,29 @@ test('type·region labels appear only when they tell candidates apart', () => {
     const keys = optionKeys(rows).map((x) => x.key);
     assert.equal(new Set(keys).size, 2);
     assert.ok(keys[0].includes('SPU 131318') && keys[1].includes('SPU 222222'));
+});
+
+test('only what a control declares is checked after activating it', () => {
+    const url = 'https://x.test/#/price-history';
+    assert.equal(declaredEffect(control('搜索按钮'), url), null, 'a plain button promises nothing');
+    assert.deepEqual(declaredEffect(control('搜索', { href: '#/search' }), url), {
+        kind: 'route',
+        href: '#/search',
+    });
+    assert.equal(
+        declaredEffect(control('本页', { href: '#/price-history' }), url),
+        null,
+        'a link to the current route promises no navigation',
+    );
+    assert.equal(declaredEffect(control('新窗口', { href: '#/x', newTab: true }), url), null);
+    assert.equal(declaredEffect(control('占位', { href: 'javascript:;' }), url), null);
+    assert.deepEqual(declaredEffect(control('模块', { expanded: 'false' }), url), {
+        kind: 'expanded',
+        was: 'false',
+    });
+    assert.deepEqual(declaredEffect(control('更多', { haspopup: 'menu' }), url), {
+        kind: 'popup',
+        type: 'menu',
+    });
+    assert.equal(declaredEffect(control('更多', { haspopup: 'false' }), url), null);
 });

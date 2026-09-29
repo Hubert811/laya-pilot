@@ -154,6 +154,11 @@ test('the next arrow comes from measurement, never from position', () => {
         idx: 1,
         probing: true,
     });
+    // antd v4 names neither arrow but marks the year one, so the unmarked one is measured first.
+    assert.deepEqual(planArrow(arrows(2, ['year', '']), new Map(), -1, 2), {
+        idx: 1,
+        probing: true,
+    });
     // A measured month arrow that fits is reused.
     assert.deepEqual(planArrow(arrows(4), new Map([['a1', { sign: -1, mag: 1 }]]), -1, 3), {
         idx: 1,
