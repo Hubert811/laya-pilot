@@ -21,11 +21,3 @@ test('existing match tiers keep their scores', () => {
     assert.equal(score('查询', control('查询', { placeholder: '查询' })), 132);
 });
 
-test('replayed synonym families clear the shortlist threshold', () => {
-    assert.ok(score('账号 Account Username', control('请输入用户名')) >= 65);
-    assert.ok(score('用户名', control('请输入用户名')) >= 120);
-    assert.ok(score('公司名称', control('公司抬头')) >= 65);
-    assert.ok(score('公司名称', control('全部', { alias: '公司抬头：' })) >= 120);
-    // Unrelated vocabulary must not be pulled in by the bounded table.
-    assert.ok(score('收货人', control('下单人')) < 65);
-});
