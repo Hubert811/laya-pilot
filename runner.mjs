@@ -54,6 +54,8 @@ const config = {
     reloadEachCase: flag('--reload-each-case'),
     language: option('--language', 'TEST_LANGUAGE', 'language', 'auto'),
     pageTimeout: Number(arg('--page-timeout', '18000')),
+    observeRetries: Number(arg('--observe-retries', '8')),
+    observeInterval: Number(arg('--observe-interval', '250')),
     delay: Number(arg('--delay', '180')),
     assertTimeout: Number(arg('--assert-timeout', '4000')),
     maxSteps: Number(arg('--max-steps', '25')),
@@ -200,6 +202,8 @@ async function main() {
         'maxSteps',
         'minProbability',
         'minMargin',
+        'observeRetries',
+        'observeInterval',
     ])
         if (!Number.isFinite(config[key]) || config[key] < 0) throw Error('参数无效：' + key);
     if (!['auto', 'zh-CN', 'en', 'none'].includes(config.language))
@@ -333,6 +337,30 @@ async function main() {
     const { browser: opened, context, page } = await openBrowser(config);
     browser = opened;
     activePage = page;
+    const loginNet = [];
+    if (process.env.LAYA_LOGIN_NETLOG) {
+        page.on('request', (r) => {
+            if (!['xhr', 'fetch'].includes(r.resourceType())) return;
+            const entry = { method: r.method(), url: r.url().split('?')[0], post: (r.postData() || '').slice(0, 120) };
+            loginNet.push(entry);
+            r.response()
+                .then((res) => {
+                    entry.status = res?.status();
+                    return res?.text().catch(() => '');
+                })
+                .then((t) => {
+                    entry.body = String(t || '').slice(0, 300);
+                })
+                .catch(() => {});
+        });
+        page.on('response', (r) => {
+            if (r.status() >= 400 && ['xhr', 'fetch'].includes(r.request().resourceType()))
+                console.log('HTTP ' + r.status() + ' ' + r.url().split('?')[0]);
+        });
+        page.on('framenavigated', (f) => {
+            if (f === page.mainFrame()) console.log('NAV ' + f.url());
+        });
+    }
     const engine = new Engine(page, laya, config);
     await engine.navigate(config.url);
     if (config.manualLogin) {
@@ -343,18 +371,44 @@ async function main() {
         config.authenticated = (await page.locator('input[type="password"]:visible').count()) === 0;
     } else if (password) {
         await page.locator('input[type="password"]:visible').first().waitFor({ timeout: 30000 });
+        const loginUrl = page.url();
+        config.loginUrl = loginUrl;
         console.log('页面语言：' + (await switchLanguage(page, config.language)));
-        const account = await engine.chooseTarget('账号 Account Username', 'fill');
-        await account.locator.fill(config.user);
-        const passwords = page.locator('input[type="password"]:visible');
-        if ((await passwords.count()) !== 1)
-            throw Error('登录页存在多个密码框，请用--manual-login');
-        await passwords.fill(password);
+        for (let attempt = 1; ; attempt++) {
+            const account = await engine.chooseTarget('账号 Account Username', 'fill');
+            await account.locator.fill(config.user);
+            const passwords = page.locator('input[type="password"]:visible');
+            if ((await passwords.count()) !== 1)
+                throw Error('登录页存在多个密码框，请用--manual-login');
+            await passwords.fill(password);
+            const button = await engine.chooseTarget('登录 Login Sign in');
+            await settle(page, 400);
+            await button.locator.click();
+            const hidden = await passwords
+                .waitFor({ state: 'hidden', timeout: 8000 })
+                .then(() => true)
+                .catch(() => false);
+            if (hidden) break;
+            // A click landing before the form's submit handler is attached falls through to
+            // a native submit: the page reloads and wipes both fields. A human re-types.
+            // Values still present mean the server simply did not redirect; do not spam.
+            const left = await passwords.first().inputValue().catch(() => null);
+            if (left === null) break;
+            if (left !== '' || attempt >= 3) {
+                await passwords.waitFor({ state: 'hidden', timeout: 30000 });
+                break;
+            }
+            console.log('登录点击落在表单挂载前，页面被原生提交刷新，重试第 ' + attempt + ' 次');
+        }
         password = null;
-        const button = await engine.chooseTarget('登录 Login Sign in');
-        await button.locator.click();
-        await passwords.waitFor({ state: 'hidden', timeout: 30000 });
-        await engine.navigate(config.url);
+        if (process.env.LAYA_LOGIN_NETLOG) {
+            await page.waitForTimeout(2000);
+            console.log('LOGIN NET ' + JSON.stringify(loginNet, null, 1));
+            console.log('LOGIN LANDED ' + page.url());
+        }
+        // A dedicated login portal usually redirects straight into the module under test
+        // with a one-time token handoff; returning to the portal would burn that handoff.
+        if (config.url !== loginUrl) await engine.navigate(config.url);
         config.authenticated = true;
     }
     // Never record login/password entry in Playwright traces.
@@ -405,6 +459,11 @@ async function main() {
         }
     }
     await context.tracing.stop({ path: path.join(config.out, 'trace.zip') });
+    if (process.env.LAYA_LOGIN_NETLOG)
+        console.log(
+            'NET PENDING ' +
+                JSON.stringify(loginNet.filter((x) => x.status === undefined).map((x) => x.url)),
+        );
     const summary = await report(results, laya, input.cases.length, input.warnings);
     console.log(
         'RESULT ' +
@@ -438,6 +497,9 @@ main().catch(async (e) => {
             .screenshot({ path: path.join(config.out, '启动失败.png') })
             .catch(() => {});
     laya?.close();
-    await browser?.close().catch(() => {});
+    if (config.keepOpen && browser) {
+        console.log('已停止；浏览器与标签页保留供手动核对，关闭窗口后退出。');
+        await new Promise((resolve) => browser.on('disconnected', resolve));
+    } else await browser?.close().catch(() => {});
     process.exitCode = 1;
 });
